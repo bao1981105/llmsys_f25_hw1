@@ -242,7 +242,7 @@ __global__ void mapKernel(
     int out_pos = index_to_position(out_index, out_strides, shape_size);
     // 6. Apply the unary function to the input element and write the output to the out memory
     out[out_pos] = fn(fn_id, in_storage[in_pos]);
-    assert(false && "Not Implemented");
+    // assert(false && "Not Implemented");
     /// END ASSIGN2_1
 }
 
