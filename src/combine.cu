@@ -369,16 +369,33 @@ __global__ void reduceKernel(
 
     // __shared__ double cache[BLOCK_DIM]; // Uncomment this line if you want to use shared memory to store partial results
     int out_index[MAX_DIMS];
-
+    int in_single_element_index[MAX_DIMS];
     /// BEGIN ASSIGN2_3
     /// TODO
     // 1. Define the position of the output element that this thread or this block will write to
+    int pos = threadIdx.x + blockIdx.x * blockDim.x;
+    if (pos >= out_size) {
+        return;
+    }
     // 2. Convert the out_pos to the out_index according to out_shape
+    to_index(pos, out_shape, out_index, shape_size);
     // 3. Initialize the reduce_value to the output element
+    float final_reduced_val = reduce_value;
+    // how do we need to find the in_pos? we need to find in_single_element_index first.
     // 4. Iterate over the reduce_dim dimension of the input array to compute the reduced value
+    // 2*2*3 ==> reduce on dim0 2*3, 2*2*3 ==> reduce on dim2 2*2, in total iterate shape[reduce_dim] times
+    for (int k = 0; k < a_shape[reduce_dim]; k++) {
+        for (int d = 0; d < shape_size; d++) {
+            in_single_element_index[d] = out_index[d];
+        }
+        in_single_element_index[reduce_dim] = i;
+        int in_single_element_pos = index_to_position(in_single_element_index, a_strides, shape_size);
+        final_reduced_val = fn(fn_id, final_reduced_val, a_storage[out_start])
+    }
     // 5. Write the reduced value to out memory
-    
-    assert(false && "Not Implemented");
+    int out_pos = index_to_position(out_index, out_strides, shape_size);
+    out[out_pos] = final_reduced_val;
+    // assert(false && "Not Implemented");
     /// END ASSIGN2_3
 }
 
@@ -433,14 +450,58 @@ __global__ void MatrixMultiplyKernel(
     /// TODO
     // Hints:
     // 1. Compute the row and column of the output matrix this block will compute
+    int row = blockIdx.x * TILE + threadIdx.x;
+    int col = blockIdx.y * TILE + threadIdx.y;
+    int m = a_shape[1];
+    int n = a_shape[2];
+    int p = b_shape[2];
     // 2. Compute the position in the output array that this thread will write to
     // 3. Iterate over tiles of the two input matrices, read the data into shared memory
-    // 4. Synchronize to make sure the data is available to all threads
-    // 5. Compute the output tile for this thread block
-    // 6. Synchronize to make sure all threads are done computing the output tile for (row, col)
-    // 7. Write the output to global memory
+    float partial_sum = 0.0f;
+    for (int tid = 0; tid < n/TILE; ++tid) {
+        // 4. Synchronize to make sure the data is available to all threads
+        // Load tile from a into shared memory
+        int a_row = row;
+        int a_col = tid * TILE + threadIdx.y;
+        // initialize a_val to 0
+        float a_val = 0.0;
+        if (a_row < m && a_col < n) {
+            int a_index = {batch, a_row, a_col};
+            int a_pos = index_to_position(a_index, a_strides, 3);
+            a_val = a_storage[a_pos];
+        }
+        a_shared[threadIdx.x][threadIdx.y] = a_val;
+        // Load tile from b into shared memory
+        int b_row = tid * TILE + threadIdx.x;
+        int b_col = col;
+        float b_val = 0.0;
+        if (b_row < n && b_col < p) {
+            int b_index = {batch, b_row, b_col};
+            int b_pos = index_to_position(b_index, b_strides, 3);
+            b_val = b_storage[b_pos];
+        }
+        b_shared[threadIdx.x][threadIdx.y] = b_val;
 
-    assert(false && "Not Implemented");
+        __syncthreads();
+        // 5. Compute the output tile for this thread block
+
+        for (int k = 0; k < TILE; ++k) {
+            int a_k = t * TILE + k;
+            if (a_k < n && row < m && col < p) {
+                sum += a_shared[threadIdx.x][k] * b_shared[k][threadIdx.y];
+            }
+            partial_sum += a_shared[threadIdx.x][k] * b_shared[k][threadIdx.y];
+        }
+        // 6. Synchronize to make sure all threads are done computing the output tile for (row, col)
+        __syncthreads();
+    }
+    // 7. Write the output to global memory
+    if (row < m && col < p) {
+        int out_index[3] = {batch, row, col};
+        int out_pos = index_to_position(out_index, out_strides, 3);
+        out[out_pos] = partial_sum;
+    }
+    // assert(false && "Not Implemented");
     /// END ASSIGN2_4
 }
 
