@@ -384,13 +384,13 @@ __global__ void reduceKernel(
     // how do we need to find the in_pos? we need to find in_single_element_index first.
     // 4. Iterate over the reduce_dim dimension of the input array to compute the reduced value
     // 2*2*3 ==> reduce on dim0 2*3, 2*2*3 ==> reduce on dim2 2*2, in total iterate shape[reduce_dim] times
-    for (int k = 0; k < a_shape[reduce_dim]; k++) {
+    for (int i = 0; i < a_shape[reduce_dim]; i++) {
         for (int d = 0; d < shape_size; d++) {
             in_single_element_index[d] = out_index[d];
         }
         in_single_element_index[reduce_dim] = i;
         int in_single_element_pos = index_to_position(in_single_element_index, a_strides, shape_size);
-        final_reduced_val = fn(fn_id, final_reduced_val, a_storage[out_start])
+        final_reduced_val = fn(fn_id, final_reduced_val, a_storage[in_single_element_pos]);
     }
     // 5. Write the reduced value to out memory
     int out_pos = index_to_position(out_index, out_strides, shape_size);
@@ -466,7 +466,7 @@ __global__ void MatrixMultiplyKernel(
         // initialize a_val to 0
         float a_val = 0.0;
         if (a_row < m && a_col < n) {
-            int a_index = {batch, a_row, a_col};
+            int a_index[3] = {batch, a_row, a_col};
             int a_pos = index_to_position(a_index, a_strides, 3);
             a_val = a_storage[a_pos];
         }
@@ -476,7 +476,7 @@ __global__ void MatrixMultiplyKernel(
         int b_col = col;
         float b_val = 0.0;
         if (b_row < n && b_col < p) {
-            int b_index = {batch, b_row, b_col};
+            int b_index[3] = {batch, b_row, b_col};
             int b_pos = index_to_position(b_index, b_strides, 3);
             b_val = b_storage[b_pos];
         }
@@ -486,11 +486,10 @@ __global__ void MatrixMultiplyKernel(
         // 5. Compute the output tile for this thread block
 
         for (int k = 0; k < TILE; ++k) {
-            int a_k = t * TILE + k;
+            int a_k = tid * TILE + k;
             if (a_k < n && row < m && col < p) {
-                sum += a_shared[threadIdx.x][k] * b_shared[k][threadIdx.y];
+                partial_sum += a_shared[threadIdx.x][k] * b_shared[k][threadIdx.y];
             }
-            partial_sum += a_shared[threadIdx.x][k] * b_shared[k][threadIdx.y];
         }
         // 6. Synchronize to make sure all threads are done computing the output tile for (row, col)
         __syncthreads();
