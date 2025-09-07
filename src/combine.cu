@@ -457,7 +457,7 @@ __global__ void MatrixMultiplyKernel(
     // 2. Compute the position in the output array that this thread will write to
     // 3. Iterate over tiles of the two input matrices, read the data into shared memory
     float partial_sum = 0.0f;
-    for (int tid = 0; tid < n/TILE; ++tid) {
+    for (int tid = 0; tid < (n + TILE - 1) / TILE; ++tid) {
         // 4. Synchronize to make sure the data is available to all threads
         // Load tile from a into shared memory
         int a_row = row;
