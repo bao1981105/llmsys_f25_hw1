@@ -467,7 +467,7 @@ __global__ void MatrixMultiplyKernel(
         float a_val = 0.0;
         if (a_row < m && a_col < n) {
             int a_index[3] = {batch, a_row, a_col};
-            int a_pos = index_to_position(a_index, a_strides, 3);
+            int a_pos = index_to_position(a_index, a_batch_stride, 3);
             a_val = a_storage[a_pos];
         }
         a_shared[threadIdx.x][threadIdx.y] = a_val;
@@ -477,7 +477,7 @@ __global__ void MatrixMultiplyKernel(
         float b_val = 0.0;
         if (b_row < n && b_col < p) {
             int b_index[3] = {batch, b_row, b_col};
-            int b_pos = index_to_position(b_index, b_strides, 3);
+            int b_pos = index_to_position(b_index, b_batch_stride, 3);
             b_val = b_storage[b_pos];
         }
         b_shared[threadIdx.x][threadIdx.y] = b_val;
