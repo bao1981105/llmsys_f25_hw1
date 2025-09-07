@@ -444,8 +444,6 @@ __global__ void MatrixMultiplyKernel(
     int batch = blockIdx.z;
     int a_batch_stride = a_shape[0] > 1 ? a_strides[0] : 0;
     int b_batch_stride = b_shape[0] > 1 ? b_strides[0] : 0;
-    a_strides[0] = a_batch_stride;
-    b_strides[0] = b_batch_stride;
 
     /// BEGIN ASSIGN2_4
     /// TODO
@@ -468,7 +466,8 @@ __global__ void MatrixMultiplyKernel(
         float a_val = 0.0;
         if (a_row < m && a_col < n) {
             int a_index[3] = {batch, a_row, a_col};
-            int a_pos = index_to_position(a_index, a_strides, 3);
+            int a_local_strides[3] = {a_batch_stride, a_strides[1], a_strides[2]};
+            int a_pos = index_to_position(a_index, a_local_strides, 3);
             a_val = a_storage[a_pos];
         }
         a_shared[threadIdx.x][threadIdx.y] = a_val;
@@ -478,7 +477,8 @@ __global__ void MatrixMultiplyKernel(
         float b_val = 0.0;
         if (b_row < n && b_col < p) {
             int b_index[3] = {batch, b_row, b_col};
-            int b_pos = index_to_position(b_index, b_strides, 3);
+            int b_local_strides[3] = {b_batch_stride, b_strides[1], b_strides[2]};
+            int b_pos = index_to_position(b_index, b_local_strides, 3);
             b_val = b_storage[b_pos];
         }
         b_shared[threadIdx.x][threadIdx.y] = b_val;
@@ -488,7 +488,7 @@ __global__ void MatrixMultiplyKernel(
 
         for (int k = 0; k < TILE; ++k) {
             int a_k = tid * TILE + k;
-            if (a_k < n && row < m && col < p) {
+            if (a_k < n) {
                 partial_sum += a_shared[threadIdx.x][k] * b_shared[k][threadIdx.y];
             }
         }
